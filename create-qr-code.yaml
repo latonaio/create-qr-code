@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: create-qr-code
+  name: create-qr-code
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: create-qr-code
+  strategy:
+    rollingUpdate:
+  template:
+    metadata:
+      labels:
+        run: create-qr-code
+    spec:
+      hostname: create-qr-code
+      containers:
+        - name: create-qr-code
+          image: latonaio/create-qr-code
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "9000"
+            - name: TZ
+              value: Asia/Tokyo
+          ports:
+            - containerPort: 9000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "1"
+              memory: "200Mi"
+            requests:
+              cpu: "0.5"
+              memory: "100Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    run: create-qr-code
+  name: create-qr-code
+spec:
+  selector:
+    run: create-qr-code
+  type: ClusterIP
+  ports:
+    - port: 9000
+      protocol: TCP
+      targetPort: 9000
