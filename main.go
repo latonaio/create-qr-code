@@ -66,6 +66,10 @@ func main() {
 			if !ok {
 				errCh <- fmt.Errorf("failed to convert interface{} to string")
 			}
+			option, ok := fromMetadata["option"].(string)
+			if !ok {
+				errCh <- fmt.Errorf("failed to convert interface{} to string")
+			}
 
 			qrCode, _ := qr.Encode(json_str, qr.M, qr.Auto)
 			qrCode, _ = barcode.Scale(qrCode, size, size)
@@ -74,7 +78,7 @@ func main() {
 			png.Encode(file, qrCode)
 			file.Close()
 
-			toMetadata := map[string]interface{}{"file_path": output_path}
+			toMetadata := map[string]interface{}{"file_path": output_path, "option": option}
 
 			// Write metadata to Kanban
 			if err := writeKanban(kanbanClient, toMetadata); err != nil {
