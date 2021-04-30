@@ -17,7 +17,7 @@ kanban から受信する metadata に下記の情報を含む必要がありま
 ```example
 # metadata (map[string]interface{}) の中身
 
-"size": 200
+"size": "200"
 "json_str": "{id: xxxxx, name: yyyyy}"
 "output_path": "/aaa/bbb/ccc/sample.png"
 ```

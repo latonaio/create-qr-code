@@ -6,10 +6,12 @@ import (
 	"image/png"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"bitbucket.org/latonaio/aion-core/pkg/go-client/msclient"
 	"bitbucket.org/latonaio/aion-core/pkg/log"
+	"bitbucket.org/latonaio/aion-core/proto/kanbanpb"
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
 )
@@ -18,17 +20,14 @@ func main() {
 	// Create Kanban client
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	kanbanClient, err := msclient.NewKanbanClient(ctx, msName)
+	kanbanClient, err := msclient.NewKanbanClient(ctx, msName, kanbanpb.InitializeType_START_SERVICE)
 	if err != nil {
 		log.Fatalf("failed to get kanban client: %v", err)
 	}
 	log.Printf("successful get kanban client")
 	defer kanbanClient.Close()
 
-	kanbanCh, err := kanbanClient.GetKanbanCh()
-	if err != nil {
-		log.Fatalf("failed to get kanban channel: %v", err)
-	}
+	kanbanCh := kanbanClient.GetKanbanCh()
 	log.Printf("successfull get kanban channel")
 
 	errCh := make(chan error, 1)
@@ -47,42 +46,67 @@ func main() {
 				continue
 			}
 			// Get metadata from Kanban
-			fromMetadata, err := k.GetMetadataByMap()
+			fromMetadata, err := msclient.GetMetadataByMap(k)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to get metadata: %v", err)
+				continue
 			}
 			log.Printf("got metadata from kanban")
 			log.Debugf("metadata: %v", fromMetadata)
 
-			size, ok := fromMetadata["size"].(int)
+			sizeStr, ok := fromMetadata["size"].(string)
 			if !ok {
-				errCh <- fmt.Errorf("failed to convert interface{} to string")
+				errCh <- fmt.Errorf("failed to convert size to string")
+				continue
 			}
-			json_str, ok := fromMetadata["json_str"].(string)
-			if !ok {
-				errCh <- fmt.Errorf("failed to convert interface{} to string")
+			size, err := strconv.Atoi(sizeStr)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to convert size to int")
+				continue
 			}
-			output_path, ok := fromMetadata["output_path"].(string)
+			jsonStr, ok := fromMetadata["json_str"].(string)
 			if !ok {
-				errCh <- fmt.Errorf("failed to convert interface{} to string")
+				errCh <- fmt.Errorf("failed to convert json_str to string")
+				continue
+			}
+			outputPath, ok := fromMetadata["output_path"].(string)
+			if !ok {
+				errCh <- fmt.Errorf("failed to convert output_path to string")
+				continue
 			}
 			option, ok := fromMetadata["option"].(string)
 			if !ok {
-				errCh <- fmt.Errorf("failed to convert interface{} to string")
+				errCh <- fmt.Errorf("failed to convert option to string")
+				continue
 			}
 
-			qrCode, _ := qr.Encode(json_str, qr.M, qr.Auto)
-			qrCode, _ = barcode.Scale(qrCode, size, size)
-
-			file, _ := os.Create(output_path)
-			png.Encode(file, qrCode)
+			qrCode, err := qr.Encode(jsonStr, qr.M, qr.Auto)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to encode json to QR code: %v", err)
+				continue
+			}
+			qrCode, err = barcode.Scale(qrCode, size, size)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to scale QR code: %v", err)
+				continue
+			}
+			file, err := os.Create(outputPath)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to create file: %v", err)
+				continue
+			}
+			if err = png.Encode(file, qrCode); err != nil {
+				errCh <- fmt.Errorf("failed to encode QR code to png: %v", err)
+				continue
+			}
 			file.Close()
 
-			toMetadata := map[string]interface{}{"file_path": output_path, "option": option}
+			toMetadata := map[string]interface{}{"file_path": outputPath, "option": option}
 
 			// Write metadata to Kanban
 			if err := writeKanban(kanbanClient, toMetadata); err != nil {
 				errCh <- fmt.Errorf("failed to write kanban: %v", err)
+				continue
 			}
 			log.Printf("write metadata to kanban")
 		}
